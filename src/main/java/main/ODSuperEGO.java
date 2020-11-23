@@ -51,7 +51,7 @@ public class ODSuperEGO {
 		this.result = new ArrayList<Integer>();
 		this.t = joinThreshold;
 		this.isSelfJoin = false;
-		this.rand =  = new Random();
+		this.rand = new Random();
 	}
 	
 	public void range(Table a, double eps) {
