@@ -1,34 +1,23 @@
-package simjoin.superego;
+package main;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Random;
 
 import common.DistanceFunction;
 import common.EuclideanDistance;
-import common.Row;
+import common.Instance;
 import common.Table;
-import simjoin.RangeJoin;
-import simjoin.collector.ResultCollector;
 
-/*
- * This is a single thread implementation based on the following resources.
- * 
- * Source Code:
- * https://www.ics.uci.edu/~dvk/code/SuperEGO.html
- * 
- * Publication:
- * Kalashnikov, D. V. (2013). Super-EGO: Fast Multi-dimensional Similarity Join.
- * VLDB Journal, 22(4), 561–585. https://doi.org/10.1007/s00778-012-0305-7 
- */
-public class SuperEGO implements RangeJoin {
+public class ODSuperEGO {
 
 	private int t;
-	private Table table1;
-	private Table table2;
-	private Random rand = new Random();
+	private Table a;
+	private Table b;
+	private Random rand;
 	private int numDim;
-	private DistanceFunction dist = new EuclideanDistance();
+	private DistanceFunction dist;
 	
 	private double[][] range1;
 	private double[][] range2;
@@ -37,33 +26,50 @@ public class SuperEGO implements RangeJoin {
 	private final boolean reorderDim;
 	private final boolean allowSelfSimilar;
 	private boolean isSelfJoin;
-	private ResultCollector<?> rc;
 	
-	public SuperEGO(int joinThreshold, boolean reorderDim, boolean allowSelfSimilar,
-					DistanceFunction fn, ResultCollector<?> rc) {
+	private ArrayList<Integer> result;
+	private final int outlierThreshold;
+
+	public ODSuperEGO(int outlierThreshold, int joinThreshold) {
+		this(outlierThreshold, joinThreshold, false, false, new EuclideanDistance());
+	}
+	
+	public ODSuperEGO(int outlierThreshold) {
+		this(outlierThreshold, 1000, false, false, new EuclideanDistance());
+	}
+	
+	public ODSuperEGO(int outlierThreshold, int joinThreshold, boolean reorderDim, boolean allowSelfSimilar) {
+		this(outlierThreshold, joinThreshold, reorderDim, allowSelfSimilar, new EuclideanDistance());
+	}
+	
+	public ODSuperEGO(int outlierThreshold, int joinThreshold, boolean reorderDim,
+					boolean allowSelfSimilar, DistanceFunction fn) {
+		this.outlierThreshold = outlierThreshold;
 		this.reorderDim = reorderDim;
 		this.allowSelfSimilar = allowSelfSimilar;
 		this.dist = fn;
-		this.rc = rc;
+		this.result = new ArrayList<Integer>();
 		this.t = joinThreshold;
 		this.isSelfJoin = false;
+		this.rand =  = new Random();
 	}
 	
-	@Override
 	public void range(Table a, double eps) {
 		isSelfJoin = true;
 		range(a, a, eps);
 		isSelfJoin = false;
 	}
 	
-	@Override
 	public void range(Table a, Table b, double eps) {
-		assert a.numCols == b.numCols;
+		assert a.getNumCols() == b.getNumCols();
 		assert eps > 0;
 		
 		reset();
 		
-		numDim = a.numCols;
+		for (int i = 0; i < a.getNumRows(); i++)
+			result.add(0);
+		
+		numDim = a.getNumCols();
 		
 		// ranges for SimpleJoin
 		range1 = new double[numDim + 1][2];
@@ -71,10 +77,10 @@ public class SuperEGO implements RangeJoin {
 		range3 = new double[numDim + 1][2];		
 
 		if (isSelfJoin) {
-			table2 = table1 = a.clone();
+			b = a = a.clone();
 		} else {
-			table1 = a.clone();
-			table2 = b.clone();
+			a = a.clone();
+			b = b.clone();
 		}
 		
 		// reorder dimension
@@ -82,26 +88,26 @@ public class SuperEGO implements RangeJoin {
 			doDimensionReorder(eps);
 		
 		// ego-sort
-		EGOSort(table1, eps);
+		EGOSort(a, eps);
 		if (!isSelfJoin)
-			EGOSort(table2, eps);
+			EGOSort(b, eps);
 
 		// ego-join
 		int startDim = 0;
 		int frA = 0;
-		int toA = table1.numRows - 1;
+		int toA = a.getNumRows() - 1;
 		int frB = 0;
-		int toB = table2.numRows - 1;
+		int toB = b.getNumRows() - 1;
 		
 		EGOJoin(frA, toA, frB, toB, startDim, eps);	
 	}
 	
 	private void doDimensionReorder(double eps) {
-		assert table1.numCols >= 2;
-		assert table2.numCols >= 2;
+		assert a.getNumCols() >= 2;
+		assert b.getNumCols() >= 2;
 		assert eps > 0;
 		
-		int sampleSize = (int) Math.ceil(table1.numRows * 0.2);
+		int sampleSize = (int) Math.ceil(a.getNumRows() * 0.2);
 		int numBuckets = (int) Math.ceil(1/eps) + 1;
 		
 		double[][] hA = new double[numBuckets][numDim];
@@ -110,10 +116,14 @@ public class SuperEGO implements RangeJoin {
 		
 		for (int i = 0; i < sampleSize; i++) {
 			// get random point from A
-			double[] rndA = table1.rows[nextInt(0, (int)table1.numRows-1)].values;
+			int maxRowsA = (int) a.getNumRows() - 1;
+			int rndRowAId = nextInt(0, maxRowsA);
+			double[] rndA = a.getInstance(rndRowAId).getValues();
 			
 			// get random point from B
-			double[] rndB = table2.rows[nextInt(0, (int)table2.numRows-1)].values;
+			int maxRowsB = (int) b.getNumRows() - 1;
+			int rndRowBId = nextInt(0, maxRowsB);
+			double[] rndB = b.getInstance(rndRowBId).getValues();
 			
 			// update stats
 			for (int j = 0; j < numDim; j++) {
@@ -169,22 +179,22 @@ public class SuperEGO implements RangeJoin {
 		
 		
 		// reorder dimension in A (inefficient)
-		for (int i = 0; i < table1.numRows; i++) {
+		for (int i = 0; i < a.getNumRows(); i++) {
 			double[] x = new double[numDim];
 			for (int j = 0; j < numDim; j++)
-				x[j] = table1.rows[i].values[j];
+				x[j] = a.getAt(i, j);
 			for (int j = 0; j < numDim; j++)
-				table1.rows[i].values[j] = x[map[j]];
+				a.setAt(i, j, x[map[j]]);
 		}
 		
 		// reorder dimension in A (inefficient)
 		if (!isSelfJoin) {
-			for (int i = 0; i < table2.numRows; i++) {
+			for (int i = 0; i < b.getNumRows(); i++) {
 				double[] x = new double[numDim];
 				for (int j = 0; j < numDim; j++)
-					x[j] = table2.rows[i].values[j];
+					x[j] = b.getAt(i, j);
 				for (int j = 0; j < numDim; j++)
-					table2.rows[i].values[j] = x[map[j]];
+					b.setAt(i, j, x[map[j]]);
 			}
 		}
 		
@@ -263,11 +273,11 @@ public class SuperEGO implements RangeJoin {
 	}
 	
 	private void EGOSort(Table t, double eps) {
-		Collections.sort(t.asList(), new Comparator<Row>() {
+		Collections.sort(t.asList(), new Comparator<Instance>() {
 			@Override
-			public int compare(Row r1, Row r2) {
-				for (int i = 0; i < r1.values.length; i++) {
-					int d = ((int) (r1.values[i]/eps)) - ((int) (r2.values[i]/eps));					
+			public int compare(Instance r1, Instance r2) {
+				for (int i = 0; i < r1.getValues().length; i++) {
+					int d = ((int) (r1.getAt(i)/eps)) - ((int) (r2.getAt(i)/eps));					
 					if (d != 0)
 						return d;
 				}
@@ -280,10 +290,10 @@ public class SuperEGO implements RangeJoin {
 		int szA = toA - frA + 1; 
 		int szB = toB - frB + 1;
 
-		double[] fstA = table1.rows[frA].values;
-		double[] lstA = table1.rows[toA].values;
-		double[] fstB = table2.rows[frB].values;
-		double[] lstB = table2.rows[toB].values;
+		double[] fstA = a.getInstance(frA).getValues();
+		double[] lstA = a.getInstance(toA).getValues();
+		double[] fstB = b.getInstance(frB).getValues();
+		double[] lstB = b.getInstance(toB).getValues();
 		
 		// Ego-Strategy
 		double loA, hiA, loB, hiB;
@@ -332,125 +342,38 @@ public class SuperEGO implements RangeJoin {
 	}
 	
 	private void NaiveJoin(int frA, int toA, int frB, int toB, double eps) {
-		Row p, q;		
+		Instance p, q;		
 
 		for (int i = frA; i <= toA; i++) {
-			p = table1.rows[i];
-			for(int j = frB; j <= toB; j++) {
-				q = table2.rows[j];
-				
-				if (!allowSelfSimilar && (p.id == q.id))
+			p = a.getInstance(i);
+			if (result.get(p.getId()) > outlierThreshold) continue;
+			
+			for (int j = frB; j <= toB; j++) {
+				q = b.getInstance(j);
+
+				if (!allowSelfSimilar && (p.getId() == q.getId()))
 					continue;
 				
-				if (dist.compute(p.values, q.values) <= eps) {
-					if (isSelfJoin) {
-						rc.addPair(p.id, q.id);
-						rc.addPair(q.id, p.id);
-					} else {
-						rc.addPair(p.id, q.id);						
-					}
-				}
-			}
-		}
-	}
-	
-	private void SimpleJoin(int frA, int toA, int frB, int toB, double eps) {
-		Row p, q;
-		double eps2 = eps * eps;
-		double s, dx;
-		boolean skip;
-		
-		for (int i = frA; i <= toA; i++) {
-			p = table1.rows[i];
+				if (dist.compute(p.getValues(), q.getValues()) <= eps) {
 
-			for (int j = frB; j <= toB; j++) {
-				q = table2.rows[j];
-				
-				if (!allowSelfSimilar && (p.id == q.id))
-					continue;
-				
-				s = 0;
-				dx = 0;
-				skip = false;
-				
-				for (int k = 0; k < numDim; k++) {
-					dx = p.values[k] - q.values[k];
-					s += dx * dx;
-					if (s >= eps2) {
-						skip = true;
-						break;
-					}
-				}
-				
-				if (!skip) {
 					if (isSelfJoin) {
-						rc.addPair(p.id, q.id);
-						rc.addPair(q.id, p.id);
+						result.set(p.getId(), result.get(p.getId()) + 1);
+						result.set(q.getId(), result.get(q.getId()) + 1);
 					} else {
-						rc.addPair(p.id, q.id);						
-					}					
-				}
-				
-				skip = false;
-			}
-		}
-	}
-	
-	private void  SimpleJoinAlternative(int frA, int toA, int frB, int toB, double eps) {
-		Row p, q;
-		double s;
-		double dx;
-		boolean skip;
-		final double eps2 = eps * eps;
-
-		for (int i = frA; i <= toA; i++) {
-			p = table1.rows[i];
-			for (int j = frB; j <= toB; j++) {
-				q = table2.rows[j];
-				s = 0;
-				skip = false;
-				int mid = (int) Math.floor(numDim/2);
-				
-				for (int k = mid; !skip && k < numDim; k++) {
-					dx = p.values[k] - q.values[k];
-					s += dx * dx;
-					if (s >= eps2) {						
-						skip = true;
-						break;
+						result.set(p.getId(), result.get(p.getId()) + 1);
 					}
 				}
 				
-				for (int k = 0; !skip && k < mid; k++) {
-					dx = p.values[k] - q.values[k];
-					s += dx * dx;
-					if (s >= eps2) {						
-						skip = true;
-						break;
-					}
-				}
-				
-				if (!skip) {
-					if (isSelfJoin) {
-						rc.addPair(p.id, q.id);
-						rc.addPair(q.id, p.id);
-					} else {
-						rc.addPair(p.id, q.id);						
-					}
-				}
-				
-				skip = false;
+				if (result.get(p.getId()) > outlierThreshold) break;
 			}
 		}
 	}
 
-	@Override
 	public void reset() {
-		rc.clear();
+		result.clear();
 	}
 
-	@Override
-	public ResultCollector<?> getResultCollector() {
-		return rc;
-	}
-		
+	public ArrayList<Integer> getResult() {
+		return result;
+	}			
 }

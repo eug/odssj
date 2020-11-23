@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
@@ -15,14 +16,20 @@ import org.apache.commons.lang3.StringUtils;
 
 public class Table implements Cloneable {
 
-	public final int numRows;
-	public final int numCols;
-	public final Row[] rows;
+	private String name;
+	private final int numRows;
+	private final int numCols;
+	private final Instance[] instances;
+	private boolean hasLabel;
+	private boolean isNormalized;
 	
-	public Table(int numRows, int numCols, Row[] rows) {
+	public Table(int numRows, int numCols, Instance[] instances, String name, boolean hasLabel) {
+		this.name = name;
 		this.numRows = numRows;
 		this.numCols = numCols;
-		this.rows = rows;
+		this.instances = instances;
+		this.hasLabel = true;
+		this.isNormalized = false;
 	}
 	
 	public static Table readCSV(String filename) {
@@ -37,19 +44,22 @@ public class Table implements Cloneable {
 		int nRows = getNumRows(filename);
 		int nCols = getNumCols(filename, sep);
 		int nDataCols = nCols;
+		boolean hasLabel = false;
 		
 		if (hasHeader)
 			nRows -= 1;
 		
-		if (labelCol >= 0)
+		if (labelCol >= 0) {
+			hasLabel = true;
 			nDataCols -= 1;
+		}
 
-		Row[] rows = new Row[nRows];
+		Instance[] instances = new Instance[nRows];
 		
 		try (BufferedReader bf = new BufferedReader(new FileReader(filename))) {
 			String line;
 			String[] v;
-			int labelValue = -1;
+			int label = -1;
 			
 			if (hasHeader)
 				bf.readLine(); // skip header
@@ -60,26 +70,32 @@ public class Table implements Cloneable {
 
 				for (int j = 0; j < v.length; j++) {
 					if (j == labelCol) {
-						labelValue = Integer.parseInt(v[j]);
+						label = Integer.parseInt(v[j]);
 					} else {						
 						values[j] = Double.parseDouble(v[j]);
 					}
 				}
 				
-				rows[i] = new Row(i, values, labelValue);
+				instances[i] = new Instance(i, values, label);
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 		
-		return new Table(nRows, nDataCols, rows);
+		return new Table(nRows, nDataCols, instances, getName(filename), hasLabel);
+	}
+	
+	private static String getName(String filename) {
+		String basename = Paths.get(filename).getFileName().toString();
+		return basename.substring(0, basename.lastIndexOf("."));
 	}
 	
 	private static int getNumCols(String filename, String sep) {
 		try {
 			Stream<String> stream = Files.lines(Paths.get(filename));
 			String header = stream.iterator().next();
-			return (int ) StringUtils.countMatches(header, sep) + 1;
+			stream.close();
+			return (int) StringUtils.countMatches(header, sep) + 1;
 		} catch (IOException e) {
 			return 0;
 		}
@@ -94,36 +110,84 @@ public class Table implements Cloneable {
 		}
 	}
 	
-	public List<Row> asList() {
-		return Arrays.asList(this.rows);
+	public void normalize() {
+		assert numRows > 0;
+		assert numCols > 0;
+		assert Objects.nonNull(instances);
+		
+		for (int j = 0; j < numCols; j++) {
+			double minVal = Double.MAX_VALUE;
+			double maxVal = Double.MIN_VALUE;
+			for (int i = 0; i < numRows; i++) {
+				minVal = Math.min(instances[i].getAt(j), minVal);
+				maxVal = Math.max(instances[i].getAt(j), maxVal);
+			}
+			for (int i = 0; i < numRows; i++) {
+				double value = (instances[i].getAt(j) - minVal) / (maxVal - minVal);
+				instances[i].setAt(j, value); 
+			}
+		}
+
+		isNormalized = true;
+	}
+	
+	public boolean isNormalized() {
+		return isNormalized;
+	}
+	
+	public Instance getInstance(int i) {
+		return instances[i];
+	}
+	
+	public double getAt(int i, int j) {
+		return instances[i].getAt(j);
+	}
+	
+	public void setAt(int i, int j, double value) {
+		instances[i].setAt(j, value);
+	}
+	
+	public List<Instance> asList() {
+		return Arrays.asList(this.instances);
+	}
+	
+	public int[] getLabels() {
+		int[] labels = new int[numRows];
+		for (int i = 0; i < numRows; i++) {
+			labels[i] = getInstance(i).getLabel();
+		}
+		return labels;
+	}
+	
+	public int getNumRows() {
+		return numRows;
+	}
+	
+	public int getNumCols() {
+		return numCols;
+	}
+	
+	public String getName() {
+		return name;
+	}
+	
+	public boolean hasLabel() {
+		return hasLabel;
 	}
 	
 	@Override
 	public Table clone() {
-		Row[] rows = new Row[numRows];
-		for (int i = 0; i < numRows; i++)
-			rows[i] = new Row(this.rows[i].id, this.rows[i].values);
-		return new Table(numRows, numCols, rows);
-	}
-
-	public void normalize() {
-		double x, minVal, maxVal;
-
-		for (int j = 0; j < numCols; j++) {
-			minVal = Double.MAX_VALUE;
-			maxVal = Double.MIN_VALUE;
-			
-			for (int i = 0; i < numRows; i++) {
-				x = rows[i].values[j];
-				minVal = Math.min(minVal, x);
-				maxVal = Math.max(maxVal, x);
-			}
-			
-			for (int i = 0; i < numRows; i++) {
-				x = rows[i].values[j];
-				rows[i].values[j] = (x - minVal) / (maxVal - minVal);
-			}
-		}
+		int id, lbl;
+		double[] vals;
+		Instance[] instances = new Instance[numRows];
 		
+		for (int i = 0; i < numRows; i++) {
+			id = this.instances[i].getId();
+			vals = this.instances[i].getValues();
+			lbl = this.instances[i].getLabel();
+			instances[i] = new Instance(id, vals, lbl);
+		}
+			
+		return new Table(numRows, numCols, instances, name, hasLabel);
 	}
 }
