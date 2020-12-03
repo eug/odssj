@@ -77,10 +77,10 @@ public class ODSuperEGO {
 		range3 = new double[numDim + 1][2];		
 
 		if (isSelfJoin) {
-			b = a = a.clone();
+			this.b = this.a = a.clone();
 		} else {
-			a = a.clone();
-			b = b.clone();
+			this.a = a.clone();
+			this.b = b.clone();
 		}
 		
 		// reorder dimension
