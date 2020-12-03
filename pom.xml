@@ -85,7 +85,7 @@
 						<manifest>
 							<addClasspath>true</addClasspath>
 							<classpathPrefix>lib/</classpathPrefix>
-							<mainClass>Main</mainClass>
+							<mainClass>main.Benchmark</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
