@@ -19,11 +19,11 @@ public class Benchmark {
 //		datasets.add(Table.readCSV("datasets/vertebral.csv",   ",",  6, true));
 //		datasets.add(Table.readCSV("datasets/ecoli.csv",       ",",  7, true));
 //		datasets.add(Table.readCSV("datasets/ionosphere.csv",  ",", 33, true));
-		datasets.add(Table.readCSV("datasets/breastw.csv",     ",",  9, true));
+//		datasets.add(Table.readCSV("datasets/breastw.csv",     ",",  9, true));
 //		datasets.add(Table.readCSV("datasets/pima.csv",        ",",  8, true));
 //		datasets.add(Table.readCSV("datasets/thyroid.csv",     ",",  6, true));
 //		datasets.add(Table.readCSV("datasets/satimage-2.csv",  ",", 36, true));
-//		datasets.add(Table.readCSV("datasets/satellite.csv",   ",", 36, true));
+		datasets.add(Table.readCSV("datasets/satellite.csv",   ",", 36, true));
 //		datasets.add(Table.readCSV("datasets/mammography.csv", ",",  6, true));
 //		datasets.add(Table.readCSV("datasets/shuttle.csv",     ",",  9, true));
 //		datasets.add(Table.readCSV("datasets/http.csv",        ",",  3, true));
@@ -36,11 +36,11 @@ public class Benchmark {
 //		parameters.add(new Quartet<>("vertebral  ", 0.4330,   82,  10));
 //		parameters.add(new Quartet<>("ecoli      ", 0.1869,    7,  10));
 //		parameters.add(new Quartet<>("ionosphere ", 0.6266,    2,  90));
-		parameters.add(new Quartet<>("breastw    ", 0.2346,    7,  10));
+//		parameters.add(new Quartet<>("breastw    ", 0.2346,    7,  10));
 //		parameters.add(new Quartet<>("pima       ", 0.5410,   54,  10));
 //		parameters.add(new Quartet<>("thyroid    ", 0.0001,    1,  10));
 //		parameters.add(new Quartet<>("satimage-2 ", 0.7657,   34, 100));
-//		parameters.add(new Quartet<>("satellite  ", 0.2300,  110, 100));
+		parameters.add(new Quartet<>("satellite  ", 0.2300,  110, 100));
 //		parameters.add(new Quartet<>("mammography", 0.0130,   65, 100));
 //		parameters.add(new Quartet<>("shuttle    ", 0.1266, 1230, 100));
 //		parameters.add(new Quartet<>("http       ", 0.2270, 1300, 100));
@@ -64,8 +64,8 @@ public class Benchmark {
 			int joinThreshold = parameters.get(i).getValue3();
 			
 			System.out.println("dataset,joinThs,outThs,range,auc,runtime");
-			for (double r = 0.0; r < 10.0; r = r + 0.01) {
-				for (int outThreshold = 1; outThreshold <= 100; outThreshold++) {
+			for (double r = 0.01; r < 10.0; r = r + 0.01) {
+				for (int outThreshold = 101; outThreshold <= 150; outThreshold++) {
 					long start = System.currentTimeMillis();
 					double[] output = SSJ(X, r, outThreshold, joinThreshold);
 					long end = System.currentTimeMillis();
