@@ -332,11 +332,16 @@ public class ODSuperEGO {
 		}
 		
 		if ((szA >= t) && (szB >= t)) {
-			EGOJoin(frA     , midA, frB     , midB, startDim, eps);
-			EGOJoin(frA     , midA, midB + 1, toB , startDim, eps);
-			EGOJoin(midA + 1, toA , midB + 1, toB , startDim, eps);
-			if (!isSelfJoin)
-				EGOJoin(midA + 1, toA , frB     , midB, startDim, eps);
+			/* A_1 join B_1 */
+			EGOJoin(frA     , midA, frB     , midB	, startDim, eps);
+			/* A_1 join B_2 */
+			EGOJoin(frA     , midA, midB + 1, toB	, startDim, eps);
+			/* A_2 join B_1 */
+			EGOJoin(midA + 1, toA , frB		, midB	, startDim, eps);
+			/* comment to avoid incomplete neighbor count in R */
+//			if (!isSelfJoin)
+				/* A_2 join B_2 */
+				EGOJoin(midA + 1, toA , midB + 1, toB	, startDim, eps);
 			return;
 		}
 	}
@@ -356,12 +361,13 @@ public class ODSuperEGO {
 				
 				if (dist.compute(p.getValues(), q.getValues()) <= eps) {
 
-					if (isSelfJoin) {
-						result.set(p.getId(), result.get(p.getId()) + 1);
-						result.set(q.getId(), result.get(q.getId()) + 1);
-					} else {
-						result.set(p.getId(), result.get(p.getId()) + 1);
-					}
+					/* comment to avoid twice neighbor count in R */
+//					if (isSelfJoin) {
+//						result.set(p.getId(), result.get(p.getId()) + 1);
+//						result.set(q.getId(), result.get(q.getId()) + 1);
+//					} else {
+					result.set(p.getId(), result.get(p.getId()) + 1);
+//					}
 				}
 				
 				if (result.get(p.getId()) > outlierThreshold) break;
