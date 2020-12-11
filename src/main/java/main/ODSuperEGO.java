@@ -88,9 +88,9 @@ public class ODSuperEGO {
 			doDimensionReorder(eps);
 		
 		// ego-sort
-		EGOSort(a, eps);
+		EGOSort(this.a, eps);
 		if (!isSelfJoin)
-			EGOSort(b, eps);
+			EGOSort(this.b, eps);
 
 		// ego-join
 		int startDim = 0;
